@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proxyforge"
+dynamic = ["version"]
+description = "Parse, validate, classify (residential/datacenter/mobile), rotate and use proxies."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["proxy", "proxies", "socks5", "rotation", "residential", "scraping", "networking"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Internet :: WWW/HTTP",
+    "Typing :: Typed",
+]
+dependencies = [
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+socks = ["requests[socks]>=2.28"]
+async = ["httpx[socks]>=0.24"]
+all = ["requests[socks]>=2.28", "httpx[socks]>=0.24"]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "httpx[socks]>=0.24",
+    "ruff~=0.17.1",
+    "mypy>=1.8",
+    "types-requests",
+    "build",
+    "twine",
+]
+
+# Fill in once the repository exists, then uncomment:
+# [project.urls]
+# Homepage = "https://github.com/OWNER/proxyforge"
+# Issues = "https://github.com/OWNER/proxyforge/issues"
+# Changelog = "https://github.com/OWNER/proxyforge/blob/main/CHANGELOG.md"
+
+[project.scripts]
+proxyforge = "proxyforge:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "proxyforge.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+proxyforge = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["proxyforge"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "UP007", "UP045",   # keep Optional[...]: spelled the same on every supported Python
+    "SIM105",           # explicit try/except is clearer in the resolver helper
+    "RUF012",           # class-level constant tuple is fine
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+files = ["src/proxyforge"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+check_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true

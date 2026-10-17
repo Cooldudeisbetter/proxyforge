@@ -1,0 +1,43 @@
+name: Bug report
+description: Something is parsed, checked, rotated or classified incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please **redact proxy hosts, usernames and passwords** from anything you paste.
+        For security problems use the private "Report a vulnerability" button instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A proxy string or a few lines of code or CLI is ideal.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: proxyforge version
+      description: Output of `proxyforge --version`
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Python version and OS
+      placeholder: "3.12 on Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output / traceback
+      description: Run with `-vv` for debug logs.
+      render: text

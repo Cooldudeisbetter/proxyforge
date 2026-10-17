@@ -46,7 +46,7 @@ pip install "proxyforge[all]"          # everything
 ```
 
 From a clone: `pip install -e ".[dev]"`. Before the first PyPI release you can install straight
-from GitHub: `pip install "git+https://github.com/OWNER/proxyforge"`.
+from GitHub: `pip install "git+https://github.com/Cooldudeisbetter/proxyforge"`.
 
 ## Quick start
 
