@@ -10,6 +10,8 @@ whether each exit IP looks **residential**, **datacenter** or **mobile**.
   `user:pass:host:port`, `scheme://...`, IPv6, percent-encoded passwords, even passwords containing `@`
 - **Checks fast**: threaded or asyncio, records latency and exit IP, auto-detects http / socks5 / socks4
 - **Classifies exit IPs**: residential / datacenter / mobile with a confidence score and reasons
+- **Geolocates exit IPs**: city, coordinates, timezone, plus a matching locale and `Accept-Language`,
+  ready to drop into a Playwright context
 - **Rotates properly**: round-robin, random, least-used, latency-weighted, or sticky per account;
   failing proxies are banned with exponential backoff and requests fail over automatically
 - **Plugs into your stack**: requests, httpx, aiohttp, Playwright, curl, Chrome
@@ -31,6 +33,7 @@ whether each exit IP looks **residential**, **datacenter** or **mobile**.
 [Checking proxies](#checking-proxies) ·
 [Rotating pool](#rotating-pool) ·
 [Residential vs datacenter](#how-classification-works) ·
+[Location, timezone and locale](#location-timezone-and-locale) ·
 [Using proxies with other clients](#using-proxies-with-other-clients) ·
 [API reference](#api-reference) ·
 [Security and privacy](#security-and-privacy) ·
@@ -100,6 +103,7 @@ python -m proxyforge --version
 | `--classify` | Tag survivors as residential / datacenter / mobile |
 | `--kind KIND...` | Keep only these kinds (implies `--classify`) |
 | `--rotation-samples N` | Extra requests per proxy to see whether its exit IP rotates |
+| `--geo` | Add city, coordinates, timezone and locale of each exit IP to the output |
 | `--api-key KEY` | ip-api.com pro key (HTTPS, higher limits) |
 | `--to FORMAT` / `-o FILE` | Output format (`url`, `host:port`, `host:port:user:pass`, `user:pass@host:port`, `user:pass:host:port`, `json`, `csv`) and destination |
 | `-v` / `-vv` | Log to stderr (info / debug) |
@@ -207,6 +211,41 @@ Limits to keep in mind:
   `proxyforge` rate-limits itself to 40/min and caches results, so large lists take time. Pass
   `api_key=` for the paid HTTPS endpoint. Each lookup sends the exit IP to ip-api.com.
 
+## Location, timezone and locale
+
+```python
+geo = pk.geolocate(proxy)  # looks up the proxy's exit IP; also stored on proxy.geo
+geo.city, geo.region, geo.country_code  # "Kingston", "Kingston", "JM"
+geo.latitude, geo.longitude  # 17.9712, -76.7936
+geo.timezone, geo.utc_offset  # "America/Jamaica", -18000
+geo.locale, geo.accept_language  # "en-JM", "en-JM,en;q=0.9"
+
+geo.geolocation(accuracy=100)  # {"latitude": ..., "longitude": ..., "accuracy": 100}
+geo.headers()  # {"Accept-Language": "en-JM,en;q=0.9"}
+
+# A browser context that agrees with the proxy's exit location:
+ctx = browser.new_context(proxy=proxy.playwright(), **geo.playwright_context())
+```
+
+`pk.geolocate_ip("1.2.3.4")` works on a bare IP, `pk.geolocate_many(proxies)` and
+`pool.geolocate()` do whole lists, and `proxyforge check list.txt --geo --to json` adds the fields
+to the output (`city`, `region`, `latitude`, `longitude`, `timezone`, `locale`).
+
+What to know before relying on it:
+
+- **Accuracy is not measured.** IP geolocation is typically city level, and the free provider
+  returns no accuracy radius. The `accuracy` you pass to `geolocation()` is a number you choose to
+  report to the browser, not something looked up.
+- **Locale and `Accept-Language` are inferred from the country**, from a built-in table of about
+  120 countries. An IP cannot tell you what language a person uses, and multilingual countries
+  (Canada, Belgium, Switzerland) get a single guess. `geo.locale_fallback` is `True` when the
+  country is not in the table and `en-US` was used instead.
+- **Rotating proxies:** the result describes one exit IP. The next connection may leave from
+  somewhere else, so use a sticky session, or call `geolocate(proxy, refresh=True)` when it
+  matters. `geolocate()` otherwise reuses the exit IP from the last check.
+- It uses the same ip-api.com lookup, cache and rate limit as classification (free tier, HTTP,
+  about 45 requests a minute), so classifying and geolocating the same IP costs one request.
+
 ## Using proxies with other clients
 
 ```python
@@ -232,6 +271,7 @@ Export with `pk.export_txt(proxies, fmt)`, `pk.export_json(...)`, `pk.export_csv
 | `check_proxy` / `check_many` / `acheck_many` / `detect_scheme` | Validate proxies |
 | `ProxyPool` | Rotation, bans, retries, `request`, `arequest`, `session`, `lease`, `classify`, `only`, `stats` |
 | `classify` / `classify_ip` / `classify_many` / `lookup_ip` / `reverse_dns` | Exit-IP classification |
+| `Geo` / `geolocate` / `geolocate_ip` / `geolocate_many` / `locale_for_country` | Location, timezone, locale, `Accept-Language`, Playwright context |
 | `export_txt` / `export_json` / `export_csv` | Serialize |
 | `ProxyParseError`, `NoProxyAvailable`, `PoolExhausted` | Exceptions |
 
@@ -246,7 +286,7 @@ by default.
 - The CLI creates output files with mode `0600` (owner only) on POSIX. Keep proxy lists out of git;
   the bundled `.gitignore` covers common names.
 - `proxy.curl_args()` exposes the password in the process list while curl runs.
-- Classification sends exit IPs to ip-api.com (plain HTTP on the free tier).
+- Classification and geolocation send exit IPs to ip-api.com (plain HTTP on the free tier).
 - `load_url()` refuses non-http(s) URLs and downloads larger than 20 MB (configurable).
 
 Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).

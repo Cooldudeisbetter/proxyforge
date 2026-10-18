@@ -6,6 +6,23 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-18
+
+### Added
+- Exit-IP geolocation: `geolocate()`, `geolocate_ip()`, `geolocate_many()`, `ProxyPool.geolocate()`
+  and the `Geo` result (city, region, country, coordinates, timezone, UTC offset, currency,
+  locale, `Accept-Language`), stored on `Proxy.geo`.
+- `Geo.playwright_context()`, `Geo.geolocation()` and `Geo.headers()` for making a browser session
+  agree with the proxy's exit location.
+- `locale_for_country()` (country to browser locale, about 120 countries).
+- `proxyforge check --geo`.
+
+### Changed
+- JSON/CSV exports gain `city`, `region`, `latitude`, `longitude`, `timezone` and `locale` columns
+  (empty until `geolocate()` has run). CSV consumers that index columns by position should switch
+  to header names.
+- `lookup_ip()` now also requests coordinates, timezone, region, zip and currency.
+
 ## [0.1.0] - 2026-10-17
 
 First public release.
@@ -29,5 +46,6 @@ First public release.
 - `proxyforge` CLI (`parse`, `convert`, `check`) and `python -m proxyforge`;
   output files are created with owner-only permissions.
 
-[Unreleased]: https://github.com/Cooldudeisbetter/proxyforge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Cooldudeisbetter/proxyforge/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Cooldudeisbetter/proxyforge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Cooldudeisbetter/proxyforge/releases/tag/v0.1.0

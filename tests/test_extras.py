@@ -184,7 +184,11 @@ def test_lookup_ip_retries_on_429_and_caches(monkeypatch):
 
 
 def test_reverse_dns_times_out_quietly(monkeypatch):
-    monkeypatch.setattr(pk.socket, "gethostbyaddr", lambda ip: time.sleep(5))
+    def slow_resolver(ip):
+        time.sleep(1)
+        return ("late.example", [], [ip])
+
+    monkeypatch.setattr(pk.socket, "gethostbyaddr", slow_resolver)
     t0 = time.monotonic()
     assert pk.reverse_dns("1.2.3.4", timeout=0.2) is None
     assert time.monotonic() - t0 < 2

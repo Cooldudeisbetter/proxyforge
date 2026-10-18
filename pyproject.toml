@@ -85,6 +85,7 @@ ignore = [
     "UP007", "UP045",   # keep Optional[...]: spelled the same on every supported Python
     "SIM105",           # explicit try/except is clearer in the resolver helper
     "RUF012",           # class-level constant tuple is fine
+    "SIM905",           # keep the locale table as a readable multi-line string
 ]
 
 [tool.ruff.lint.per-file-ignores]

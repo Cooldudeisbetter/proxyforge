@@ -38,18 +38,19 @@ import time
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from hashlib import blake2b
 from typing import Any, Callable, Optional
 from urllib.parse import quote, unquote
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 _UA = f"proxyforge/{__version__}"
 log = logging.getLogger("proxyforge")
 log.addHandler(logging.NullHandler())
 __all__ = [
     "CheckResult",
     "Classification",
+    "Geo",
     "NoProxyAvailable",
     "ParseResult",
     "PoolExhausted",
@@ -68,8 +69,12 @@ __all__ = [
     "export_json",
     "export_txt",
     "extract",
+    "geolocate",
+    "geolocate_ip",
+    "geolocate_many",
     "load_file",
     "load_url",
+    "locale_for_country",
     "lookup_ip",
     "main",
     "parse",
@@ -118,6 +123,7 @@ class Proxy:
     isp: Optional[str] = None
     asn: Optional[str] = None
     country: Optional[str] = None
+    geo: Optional[Geo] = None  # filled by geolocate()
     meta: dict[str, Any] = field(default_factory=dict)
 
     # identity -------------------------------------------------------------
@@ -225,6 +231,7 @@ class Proxy:
         self.latency_ms = ms if self.latency_ms is None else 0.7 * self.latency_ms + 0.3 * ms
 
     def to_dict(self, include_password: bool = True) -> dict[str, Any]:
+        g = self.geo
         d: dict[str, Any] = {
             "url": self.url() if include_password else self.masked(),
             "scheme": self.scheme,
@@ -238,6 +245,13 @@ class Proxy:
             "isp": self.isp,
             "asn": self.asn,
             "country": self.country,
+            "city": g.city if g else None,
+            "region": g.region if g else None,
+            "latitude": g.latitude if g else None,
+            "longitude": g.longitude if g else None,
+            "timezone": g.timezone if g else None,
+            "locale": g.locale if g else None,
+            "accept_language": g.accept_language if g else None,
             "successes": self.successes,
             "failures": self.failures,
         }
@@ -701,14 +715,17 @@ _IP_CACHE: dict[str, dict[str, Any]] = {}
 def lookup_ip(
     ip: str, timeout: float = 8.0, api_key: Optional[str] = None, base_url: Optional[str] = None
 ) -> dict[str, Any]:
-    """Look up ISP/ASN/hosting/mobile/proxy flags for an IP (cached, rate limited)."""
+    """Look up ISP/ASN/hosting flags and geolocation for an IP (cached, rate limited)."""
     import requests
 
     if ip in _IP_CACHE:
         return _IP_CACHE[ip]
     base = base_url or ("https://pro.ip-api.com" if api_key else "http://ip-api.com")
     params = {
-        "fields": "status,message,country,countryCode,city,isp,org,as,mobile,proxy,hosting,query"
+        "fields": (
+            "status,message,country,countryCode,regionName,city,zip,lat,lon,timezone,offset,"
+            "currency,isp,org,as,mobile,proxy,hosting,query"
+        )
     }
     if api_key:
         params["key"] = api_key
@@ -896,6 +913,189 @@ def classify_many(
 
 
 # --------------------------------------------------------------------------
+# Geolocation: coordinates, timezone, locale and Accept-Language for an exit IP
+# --------------------------------------------------------------------------
+# Same ip-api.com lookup (and cache and rate limit) as classification. IP geolocation is
+# city-level at best and the provider reports no accuracy radius. The locale and
+# Accept-Language values are *inferred from the country*: an IP address cannot reveal
+# what language a user actually speaks.
+DEFAULT_LOCALE = "en-US"
+_COUNTRY_LOCALE_TABLE = """
+US:en-US CA:en-CA MX:es-MX BR:pt-BR AR:es-AR CL:es-CL CO:es-CO PE:es-PE VE:es-VE
+EC:es-EC UY:es-UY PY:es-PY BO:es-BO CR:es-CR PA:es-PA DO:es-DO GT:es-GT SV:es-SV
+HN:es-HN NI:es-NI CU:es-CU PR:es-PR JM:en-JM TT:en-TT BB:en-BB BS:en-BS HT:fr-HT
+GB:en-GB IE:en-IE FR:fr-FR DE:de-DE AT:de-AT CH:de-CH ES:es-ES PT:pt-PT IT:it-IT
+NL:nl-NL BE:nl-BE LU:fr-LU DK:da-DK SE:sv-SE NO:nb-NO FI:fi-FI IS:is-IS PL:pl-PL
+CZ:cs-CZ SK:sk-SK HU:hu-HU RO:ro-RO BG:bg-BG GR:el-GR HR:hr-HR RS:sr-RS SI:sl-SI
+UA:uk-UA RU:ru-RU BY:be-BY LT:lt-LT LV:lv-LV EE:et-EE TR:tr-TR IL:he-IL SA:ar-SA
+AE:ar-AE EG:ar-EG MA:ar-MA DZ:ar-DZ TN:ar-TN QA:ar-QA KW:ar-KW IQ:ar-IQ JO:ar-JO
+LB:ar-LB IR:fa-IR PK:ur-PK IN:en-IN BD:bn-BD LK:si-LK NP:ne-NP CN:zh-CN HK:zh-HK
+TW:zh-TW JP:ja-JP KR:ko-KR TH:th-TH VN:vi-VN ID:id-ID MY:ms-MY SG:en-SG PH:en-PH
+AU:en-AU NZ:en-NZ ZA:en-ZA NG:en-NG KE:en-KE GH:en-GH ET:am-ET TZ:sw-TZ UG:en-UG
+KZ:ru-KZ UZ:uz-UZ GE:ka-GE AM:hy-AM AZ:az-AZ
+"""
+_COUNTRY_LOCALES: dict[str, str] = dict(item.split(":") for item in _COUNTRY_LOCALE_TABLE.split())
+
+
+def locale_for_country(country_code: Optional[str]) -> tuple[str, bool]:
+    """Most common browser locale for a country. Returns ``(locale, found)``.
+
+    ``found`` is False when the country is not in the built-in table, in which case the
+    locale is ``DEFAULT_LOCALE``.
+    """
+    loc = _COUNTRY_LOCALES.get((country_code or "").upper())
+    return (loc, True) if loc else (DEFAULT_LOCALE, False)
+
+
+def _accept_language(locale: str) -> str:
+    """Browser-style header for a locale: ``es-MX`` -> ``es-MX,es;q=0.9,en;q=0.8``."""
+    lang = locale.split("-")[0]
+    parts = [locale]
+    if lang != locale:
+        parts.append(f"{lang};q=0.9")
+    if lang != "en":
+        parts.append("en;q=0.8")
+    return ",".join(parts)
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@dataclass
+class Geo:
+    """Where an exit IP appears to be, plus browser settings that match it."""
+
+    ip: str
+    country: Optional[str] = None
+    country_code: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+    zip: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[str] = None  # IANA name, e.g. "America/Jamaica"
+    utc_offset: Optional[int] = None  # seconds east of UTC right now (DST aware)
+    currency: Optional[str] = None
+    locale: str = DEFAULT_LOCALE  # inferred from the country, see locale_for_country()
+    locale_fallback: bool = False  # True: country not in the table, default locale used
+    accept_language: str = "en-US,en;q=0.9"
+
+    def headers(self) -> dict[str, str]:
+        """Headers to send so requests look consistent with the exit location."""
+        return {"Accept-Language": self.accept_language}
+
+    def geolocation(self, accuracy: float = 100.0) -> dict[str, float]:
+        """``{"latitude", "longitude", "accuracy"}`` as the browser Geolocation API wants it.
+
+        ``accuracy`` (metres) is a value *you* choose to report: IP lookups do not provide
+        one, and the real error is typically kilometres (city level).
+        """
+        if self.latitude is None or self.longitude is None:
+            raise ValueError("no coordinates available for this IP")
+        return {"latitude": self.latitude, "longitude": self.longitude, "accuracy": accuracy}
+
+    def playwright_context(
+        self, accuracy: float = 100.0, grant_geolocation: bool = True, include_header: bool = True
+    ) -> dict[str, Any]:
+        """Keyword arguments for ``browser.new_context(**geo.playwright_context())``."""
+        ctx: dict[str, Any] = {"locale": self.locale}
+        if self.timezone:
+            ctx["timezone_id"] = self.timezone
+        if self.latitude is not None and self.longitude is not None:
+            ctx["geolocation"] = self.geolocation(accuracy)
+            if grant_geolocation:
+                ctx["permissions"] = ["geolocation"]
+        if include_header:
+            ctx["extra_http_headers"] = self.headers()
+        return ctx
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def geolocate_ip(
+    ip: str, api_key: Optional[str] = None, timeout: float = 8.0, base_url: Optional[str] = None
+) -> Geo:
+    """Geolocate an IP address (cached, shared rate limit with classification)."""
+    info = lookup_ip(ip, timeout, api_key, base_url)
+    cc = info.get("countryCode")
+    locale, found = locale_for_country(cc)
+    offset = _float_or_none(info.get("offset"))
+    return Geo(
+        ip=ip,
+        country=info.get("country"),
+        country_code=cc,
+        region=info.get("regionName"),
+        city=info.get("city"),
+        zip=info.get("zip") or None,
+        latitude=_float_or_none(info.get("lat")),
+        longitude=_float_or_none(info.get("lon")),
+        timezone=info.get("timezone") or None,
+        utc_offset=None if offset is None else int(offset),
+        currency=info.get("currency") or None,
+        locale=locale,
+        locale_fallback=not found,
+        accept_language=_accept_language(locale),
+    )
+
+
+def geolocate(
+    proxy: Proxy,
+    check_url: str = DEFAULT_CHECK_URL,
+    timeout: float = 8.0,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    refresh: bool = False,
+) -> Geo:
+    """Find where a proxy's exit IP is. Stores the result on ``proxy.geo`` and returns it.
+
+    Uses the exit IP recorded by an earlier check when there is one; pass ``refresh=True``
+    to make a fresh request first. That matters for *rotating* proxies, where the next
+    connection may leave from a different place: the result describes one exit IP only.
+    Raises ``LookupError`` if the proxy gives no exit IP, ``RuntimeError`` if ip-api fails.
+    """
+    ip = None if refresh else proxy.exit_ip
+    if not ip:
+        res = check_proxy(proxy, check_url, timeout)
+        if not (res.ok and res.ip):
+            raise LookupError(res.error or "proxy returned no exit IP")
+        ip = res.ip
+    geo = geolocate_ip(ip, api_key, timeout, base_url)
+    proxy.geo = geo
+    return geo
+
+
+def geolocate_many(
+    proxies: Iterable[Proxy],
+    workers: int = 20,
+    progress: Optional[Callable[[int, int], None]] = None,
+    **kw: Any,
+) -> list[tuple[Proxy, Optional[Geo]]]:
+    """Threaded geolocate(). A proxy that fails gets ``None`` instead of raising."""
+    plist = list(proxies)
+
+    def one(p: Proxy) -> Optional[Geo]:
+        try:
+            return geolocate(p, **kw)
+        except Exception as e:
+            log.debug("geolocate %s failed: %s", p.masked(), _scrub(f"{type(e).__name__}: {e}", p))
+            return None
+
+    out: list[tuple[Proxy, Optional[Geo]]] = []
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+        futs = {ex.submit(one, p): p for p in plist}
+        for i, f in enumerate(as_completed(futs), 1):
+            out.append((futs[f], f.result()))
+            if progress:
+                progress(i, len(plist))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Rotating pool
 # --------------------------------------------------------------------------
 class ProxyPool:
@@ -1064,6 +1264,10 @@ class ProxyPool:
     def classify(self, **kw: Any) -> list[tuple[Proxy, Classification]]:
         return classify_many(list(self._proxies), **kw)
 
+    def geolocate(self, **kw: Any) -> list[tuple[Proxy, Optional[Geo]]]:
+        """Fill ``proxy.geo`` (location, timezone, locale) for every proxy in the pool."""
+        return geolocate_many(list(self._proxies), **kw)
+
     def stats(self) -> list[dict]:
         now = time.time()
         rows = []
@@ -1222,6 +1426,12 @@ def export_csv(proxies: Iterable[Proxy], include_password: bool = True) -> str:
         "isp",
         "asn",
         "country",
+        "city",
+        "region",
+        "latitude",
+        "longitude",
+        "timezone",
+        "locale",
     ]
     w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
     w.writeheader()
@@ -1307,6 +1517,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         choices=["residential", "datacenter", "mobile"],
         help="keep only these kinds (implies --classify)",
     )
+    p3.add_argument(
+        "--geo",
+        action="store_true",
+        help="look up city, coordinates, timezone and locale of each exit IP (ip-api.com)",
+    )
     p3.add_argument("--api-key", help="ip-api.com pro key (https, higher limits)")
     p3.add_argument("--to", default="url", choices=[*FORMATS, "json", "csv"])
     p3.add_argument("-o", "--out")
@@ -1388,6 +1603,29 @@ def main(argv: Optional[list[str]] = None) -> int:
             if a.kind:
                 proxies = [p for p in proxies if p.kind in a.kind]
                 print(f"{len(proxies)} match {'/'.join(a.kind)}", file=sys.stderr)
+        if a.geo:
+
+            def gprog(done, total):
+                print(f"\rgeolocated {done}/{total}", end="", file=sys.stderr, flush=True)
+
+            geos = geolocate_many(
+                proxies,
+                workers=min(a.workers, 20),
+                progress=gprog,
+                api_key=a.api_key,
+                check_url=a.url,
+                timeout=a.timeout,
+            )
+            print(file=sys.stderr)
+            print(f"  {sum(1 for _, g in geos if g)}/{len(geos)} located", file=sys.stderr)
+            if len(geos) <= 40:
+                for p, g in geos:
+                    if g:
+                        print(
+                            f"  {p.masked():<34} {g.city or '?'}, {g.country_code or '?'}  "
+                            f"{g.timezone or '?'}  {g.latitude},{g.longitude}  {g.locale}",
+                            file=sys.stderr,
+                        )
         proxies.sort(key=lambda p: p.latency_ms or 1e9)
 
     if a.to == "json":
