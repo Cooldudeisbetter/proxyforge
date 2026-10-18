@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+### Added
+- `build_chrome_extension()` / `Proxy.chrome_extension()`: export a proxy as a Manifest V3 Chrome
+  extension (zip or unpacked folder) that sets the proxy and answers its auth challenge.
+- Signed CRX3 output (`*.crx`, optional `proxyforge[crx]` extra) with a reusable signing key, and
+  `crx_extension_id()`.
+- `proxyforge extension PROXY -o ext.zip`.
+
 ## [0.2.0] - 2026-10-18
 
 ### Added

@@ -246,6 +246,30 @@ What to know before relying on it:
 - It uses the same ip-api.com lookup, cache and rate limit as classification (free tier, HTTP,
   about 45 requests a minute), so classifying and geolocating the same IP costs one request.
 
+## Chrome extension export
+
+Chrome ignores credentials in `--proxy-server`. Export a proxy as an extension that sets it
+and answers the auth prompt:
+
+```python
+p = pk.parse("user:pass@1.2.3.4:8080")
+p.chrome_extension("proxy-ext.zip")  # zip: Selenium add_extension, Web Store upload
+p.chrome_extension("proxy-ext")  # folder: chrome://extensions > Load unpacked
+```
+
+```bash
+proxyforge extension user:pass@1.2.3.4:8080 -o proxy-ext.zip
+```
+
+The credentials are stored in plain text inside the extension, so do not publish it. Chrome
+cannot authenticate to SOCKS proxies, so SOCKS with a username/password raises `ValueError`.
+Headless Chrome needs `--headless=new` to load extensions.
+
+A `.crx` is signed with an RSA key stored next to it as `proxy-ext.pem` (created on first
+export, reused afterwards so the extension ID stays stable; keep it private). Chrome on
+Windows and macOS refuses to install `.crx` files from outside the Web Store unless a policy
+allows it, so for local use prefer the zip/folder with Selenium, Playwright or *Load unpacked*.
+
 ## Using proxies with other clients
 
 ```python

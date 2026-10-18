@@ -32,11 +32,13 @@ dependencies = [
 [project.optional-dependencies]
 socks = ["requests[socks]>=2.28"]
 async = ["httpx[socks]>=0.24"]
-all = ["requests[socks]>=2.28", "httpx[socks]>=0.24"]
+crx = ["cryptography>=41"]
+all = ["requests[socks]>=2.28", "httpx[socks]>=0.24", "cryptography>=41"]
 dev = [
     "pytest>=7",
     "pytest-cov>=4",
     "httpx[socks]>=0.24",
+    "cryptography>=41",
     "ruff~=0.17.1",
     "mypy>=1.8",
     "types-requests",
