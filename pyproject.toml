@@ -45,10 +45,10 @@ dev = [
 ]
 
 # Fill in once the repository exists, then uncomment:
-# [project.urls]
-# Homepage = "https://github.com/OWNER/proxyforge"
-# Issues = "https://github.com/OWNER/proxyforge/issues"
-# Changelog = "https://github.com/OWNER/proxyforge/blob/main/CHANGELOG.md"
+[project.urls]
+Homepage = "https://github.com/Cooldudeisbetter/proxyforge"
+Issues = "https://github.com/Cooldudeisbetter/proxyforge/issues"
+Changelog = "https://github.com/Cooldudeisbetter/proxyforge/blob/main/CHANGELOG.md"
 
 [project.scripts]
 proxyforge = "proxyforge:main"
