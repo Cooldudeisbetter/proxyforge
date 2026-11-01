@@ -1,5 +1,7 @@
 # proxyforge
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Cooldudeisbetter/proxyforge)
+
 **Parse, validate, classify, rotate and use proxies from Python or the command line.**
 
 `proxyforge` takes the messy proxy lists you actually have (five different formats mixed in one
