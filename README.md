@@ -1,6 +1,10 @@
 # proxyforge
 
 [![DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue?style=for-the-badge)](https://deepwiki.com/Cooldudeisbetter/proxyforge)
+[![PyPI](https://img.shields.io/pypi/v/proxyforge)](https://pypi.org/project/proxyforge/)
+[![Python](https://img.shields.io/pypi/pyversions/proxyforge)](https://pypi.org/project/proxyforge/)
+[![License](https://img.shields.io/pypi/l/proxyforge)](LICENSE)
+[![CI](https://github.com/Cooldudeisbetter/proxyforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Cooldudeisbetter/proxyforge/actions/workflows/ci.yml)
 
 **Parse, validate, classify, rotate and use proxies from Python or the command line.**
 
