@@ -1,6 +1,6 @@
 # proxyforge
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Cooldudeisbetter/proxyforge)
+[![DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue?style=for-the-badge)](https://deepwiki.com/Cooldudeisbetter/proxyforge)
 
 **Parse, validate, classify, rotate and use proxies from Python or the command line.**
 
